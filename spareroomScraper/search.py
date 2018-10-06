@@ -11,12 +11,14 @@ import requests
 from spareroomScraper.custom_exceptions import BadSelector
 from spareroomScraper.emailer import Emailer
 from spareroomScraper.payload import Payload
+from spareroomScraper.advert import Advert
 
 
 DOMAIN = 'https://www.spareroom.co.uk/'
 SEARCH_ENDPOINT = 'https://www.spareroom.co.uk/flatshare/'
 ADVANCED_SEARCH_ENDPOINT = 'https://www.spareroom.co.uk/flatshare/search.pl'
 ADVERTS_URLS_SELECTOR = '.listing-results-content.desktop > a'
+ADVERTS_SELECTOR = '.panel-listing-result'
 
 class Search:
     """ A class that scrapes Spareroom for adverts,
@@ -155,6 +157,34 @@ class Search:
             # This is a bs4 object
             yield DOMAIN + advert_url['href']
 
+    def _get_all_ads(self, response):
+        """ Get the prices on a single page.
+
+            Args:
+                response: A requests.Response object
+
+            Yields:
+                All of the ads returned by the search.
+
+            Raises:
+                BadSelector: If the CSS selector doesn't return any results.
+        """
+
+        page = BeautifulSoup(response.content, 'html.parser')
+
+        adverts = page.select(ADVERTS_SELECTOR)
+
+        if not adverts:
+            raise BadSelector('The CSS selector for the ads might have changed!')
+
+        for ad_response in adverts:
+            try:
+                ad = Advert(ad_response)
+                yield ad
+            except Exception as e:
+                print(e.args)
+
+
     def _filter_advert(self, url):
         """ Filter the results further more.
 
@@ -182,11 +212,11 @@ class Search:
         search_results = []
 
         for response in self._pull_pages():
-            for advert_url in self._get_all_adverts_urls(response):
+            for ad in self._get_all_ads(response):
+                search_results.append(ad)
+                print(ad)
 
-                if self._filter_advert(advert_url):
-                    search_results.append('<h4>' + advert_url + '</h4>')
-
+        print(len(search_results))
         # Send an email with the results
-        emailer = Emailer('emailer_config.ini')
-        emailer.send_gmail(''.join(search_results))
+        #emailer = Emailer('emailer_config.ini')
+        #emailer.send_gmail(''.join(search_results))
